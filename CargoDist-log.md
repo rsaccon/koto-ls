@@ -46,3 +46,7 @@ announcing v0.16.0
       [misc] LICENSE, README.md
       [checksum] koto-ls-x86_64-unknown-linux-gnu.tar.xz.sha256
 ```
+
+THEN publishing release manually via Github website
+
+=> workflow action failed at: `host` section of `release.yml` (but artifacts all got built)
