@@ -71,6 +71,7 @@ impl LanguageServer for KotoServer {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
                     TextDocumentSyncKind::FULL,
                 )),
+                hover_provider: Some(HoverProviderCapability::Simple(true)),
                 definition_provider: Some(OneOf::Left(true)),
                 document_symbol_provider: Some(OneOf::Left(true)),
                 references_provider: Some(OneOf::Left(true)),
@@ -117,18 +118,29 @@ impl LanguageServer for KotoServer {
         }
     }
 
-    async fn document_symbol(
-        &self,
-        params: DocumentSymbolParams,
-    ) -> Result<Option<DocumentSymbolResponse>> {
-        let uri = params.text_document.uri;
-        let result = self.source_info.lock().await.get(&uri).map(|info| {
-            let definitions = info
-                .top_level_definitions()
-                .map(DocumentSymbol::from)
-                .collect();
-            DocumentSymbolResponse::Nested(definitions)
-        });
+    async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
+        let uri = params.text_document_position_params.text_document.uri;
+        let position = params.text_document_position_params.position;
+
+        let result = self
+            .source_info
+            .lock()
+            .await
+            .get(&uri)
+            .and_then(|info| info.get_definition(position))
+            .map(|definition| {
+                let text = format!("{:?}", definition);
+                Hover {
+                    contents: HoverContents::Scalar(MarkedString::String(text)),
+                    range: None,
+                }
+            });
+
+        if result.is_none() {
+            self.client
+                .log_message(MessageType::INFO, "No definition found")
+                .await;
+        }
 
         Ok(result)
     }
@@ -155,6 +167,22 @@ impl LanguageServer for KotoServer {
                 .log_message(MessageType::INFO, "No definition found")
                 .await;
         }
+
+        Ok(result)
+    }
+
+    async fn document_symbol(
+        &self,
+        params: DocumentSymbolParams,
+    ) -> Result<Option<DocumentSymbolResponse>> {
+        let uri = params.text_document.uri;
+        let result = self.source_info.lock().await.get(&uri).map(|info| {
+            let definitions = info
+                .top_level_definitions()
+                .map(DocumentSymbol::from)
+                .collect();
+            DocumentSymbolResponse::Nested(definitions)
+        });
 
         Ok(result)
     }

@@ -64,6 +64,21 @@ impl SourceInfo {
         SourceInfoBuilder::from_ast(&ast, uri, info_cache).build(error)
     }
 
+    pub fn get_definition(&self, position: Position) -> Option<Definition> {
+        self.references
+            .binary_search_by(|reference| {
+                cmp_position_to_range(position, &reference.location.range)
+            })
+            .ok()
+            .map(|i| self.references[i].definition.range)
+            .and_then(|range| {
+                self.definitions
+                    .binary_search_by(|definition| cmp_ranges(&range, &definition.location.range))
+                    .ok()
+                    .map(|i| self.definitions[i].clone())
+            })
+    }
+
     pub fn get_definition_location(&self, position: Position) -> Option<Location> {
         self.references
             .binary_search_by(|reference| {
@@ -147,6 +162,16 @@ impl Iterator for FindReferencesIter<'_> {
             }
             None
         }
+    }
+}
+
+fn cmp_ranges(range1: &Range, range2: &Range) -> Ordering {
+    if range1.start < range2.start {
+        Ordering::Less
+    } else if range1.end >= range2.end {
+        Ordering::Greater
+    } else {
+        Ordering::Equal
     }
 }
 
@@ -1429,7 +1454,7 @@ export
         #[test]
         fn map_entries() -> Result<()> {
             let script = "\
-x = 
+x =
   a: 123
   b: 99
 ";
