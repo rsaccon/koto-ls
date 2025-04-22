@@ -64,7 +64,7 @@ impl SourceInfo {
         SourceInfoBuilder::from_ast(&ast, uri, info_cache).build(error)
     }
 
-    pub fn get_definition(&self, position: Position) -> Option<Definition> {
+    pub fn get_definition(&self, position: Position) -> Option<(Definition, bool)> {
         self.references
             .binary_search_by(|reference| {
                 cmp_position_to_range(position, &reference.location.range)
@@ -75,7 +75,15 @@ impl SourceInfo {
                 self.definitions
                     .binary_search_by(|definition| cmp_ranges(&range, &definition.location.range))
                     .ok()
-                    .map(|i| self.definitions[i].clone())
+                    .map(|i| (self.definitions[i].clone(), true))
+            })
+            .or_else(|| {
+                self.definitions
+                    .binary_search_by(|definition| {
+                        cmp_position_to_range(position, &definition.location.range)
+                    })
+                    .ok()
+                    .map(|i| (self.definitions[i].clone(), false))
             })
     }
 
@@ -167,9 +175,9 @@ impl Iterator for FindReferencesIter<'_> {
 
 fn cmp_ranges(range1: &Range, range2: &Range) -> Ordering {
     if range1.start < range2.start {
-        Ordering::Less
-    } else if range1.end >= range2.end {
         Ordering::Greater
+    } else if range1.end > range2.end {
+        Ordering::Less
     } else {
         Ordering::Equal
     }

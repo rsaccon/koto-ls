@@ -128,8 +128,12 @@ impl LanguageServer for KotoServer {
             .await
             .get(&uri)
             .and_then(|info| info.get_definition(position))
-            .map(|definition| {
-                let text = format!("{:?}", definition);
+            .map(|(definition, is_ref)| {
+                let symbol = DocumentSymbol::from(&definition);
+                let text = format!(
+                    "{}: {:?} (is reference: {})",
+                    symbol.name, symbol.kind, is_ref
+                );
                 Hover {
                     contents: HoverContents::Scalar(MarkedString::String(text)),
                     range: None,
