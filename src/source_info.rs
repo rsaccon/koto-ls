@@ -35,6 +35,8 @@ pub struct SourceInfo {
     definitions: Vec<Definition>,
     // A vec of all references, sorted by start position
     references: Vec<Reference>,
+    // A vec of all definitions created via Rust API  // TODO: map with symbol as key
+    definitions_ext: Vec<Definition>,
     // An error that was encountered while compiling the script
     pub error: Option<Error>,
 }
@@ -64,27 +66,39 @@ impl SourceInfo {
         SourceInfoBuilder::from_ast(&ast, uri, info_cache).build(error)
     }
 
-    pub fn get_definition(&self, position: Position) -> Option<(Definition, bool)> {
+    pub fn get_definition(&self, position: Position) -> Option<Definition> {
         self.references
             .binary_search_by(|reference| {
                 cmp_position_to_range(position, &reference.location.range)
             })
             .ok()
-            .map(|i| self.references[i].definition.range)
-            .and_then(|range| {
+            .map(|i| {
+                let reference = self.references[i].clone();
+                (reference.definition.range, reference.id)
+            })
+            .and_then(|(range, _symbol)| {
                 self.definitions
                     .binary_search_by(|definition| cmp_ranges(&range, &definition.location.range))
                     .ok()
-                    .map(|i| (self.definitions[i].clone(), true))
-            })
-            .or_else(|| {
-                self.definitions
-                    .binary_search_by(|definition| {
-                        cmp_position_to_range(position, &definition.location.range)
+                    .map(|i| {
+                        let definition = self.definitions[i].clone();
+                        definition
                     })
-                    .ok()
-                    .map(|i| (self.definitions[i].clone(), false))
+                    .or_else(|| {
+                        // TODO: proper search for rust definitions
+                        self.definitions_ext
+                            .first()
+                            .map(|definition| definition.clone())
+                    })
             })
+        // .or_else(|| {
+        //     self.definitions
+        //         .binary_search_by(|definition| {
+        //             cmp_position_to_range(position, &definition.location.range)
+        //         })
+        //         .ok()
+        //         .map(|i| (self.definitions[i].clone(), false))
+        // })
     }
 
     pub fn get_definition_location(&self, position: Position) -> Option<Location> {
@@ -270,6 +284,8 @@ struct SourceInfoBuilder<'i> {
     // All references that have been found in the file.
     // The references get added as soon as they're encountered in the AST, so they're always sorted.
     references: Vec<Reference>,
+    // All definitions that have been created via Rust API.
+    definitions_ext: Vec<Definition>,
 }
 
 impl<'i> SourceInfoBuilder<'i> {
@@ -280,11 +296,39 @@ impl<'i> SourceInfoBuilder<'i> {
             frames: Vec::new(),
             definitions: Vec::new(),
             references: Vec::new(),
+            definitions_ext: Vec::new(),
         };
 
         if let Some(entry_point) = ast.entry_point() {
             result.visit_node(entry_point, Context::new(ast));
         };
+
+        // BEGIN Hardcoded while testing
+        let uri = Url::from_file_path(std::path::Path::new(
+            "/Users/robertosaccon/GitHub/my-fidget-projects/fidget-koto/crates/fidget-koto/src/engine.rs",
+        ));
+        if let Ok(uri) = uri {
+            result.definitions_ext.push(Definition {
+                location: Location::new(
+                    Arc::new(uri),
+                    Span {
+                        start: koto_parser::Position {
+                            line: 56,
+                            column: 9,
+                        },
+                        end: koto_parser::Position {
+                            line: 73,
+                            column: 12,
+                        },
+                    },
+                ),
+                id: StringSlice::from("draw"),
+                kind: SymbolKind::FUNCTION,
+                top_level: false,
+                children: None,
+            });
+        }
+        // END Hardcoded
 
         result
     }
@@ -303,6 +347,7 @@ impl<'i> SourceInfoBuilder<'i> {
         SourceInfo {
             definitions: self.definitions,
             references: self.references,
+            definitions_ext: self.definitions_ext,
             error,
         }
     }

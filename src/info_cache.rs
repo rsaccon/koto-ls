@@ -4,7 +4,7 @@ use tower_lsp::lsp_types::Url;
 
 #[derive(Default, Debug)]
 pub struct InfoCache {
-    entries: HashMap<Arc<Url>, Info>,
+    pub entries: HashMap<Arc<Url>, Info>,
 }
 
 impl InfoCache {

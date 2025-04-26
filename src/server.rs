@@ -128,12 +128,9 @@ impl LanguageServer for KotoServer {
             .await
             .get(&uri)
             .and_then(|info| info.get_definition(position))
-            .map(|(definition, is_ref)| {
+            .map(|definition| {
                 let symbol = DocumentSymbol::from(&definition);
-                let text = format!(
-                    "{}: {:?} (is reference: {})",
-                    symbol.name, symbol.kind, is_ref
-                );
+                let text = format!("{}: {:?}", symbol.name, symbol.kind);
                 Hover {
                     contents: HoverContents::Scalar(MarkedString::String(text)),
                     range: None,
@@ -142,7 +139,7 @@ impl LanguageServer for KotoServer {
 
         if result.is_none() {
             self.client
-                .log_message(MessageType::INFO, "No definition found")
+                .log_message(MessageType::INFO, "Hover: No definition found")
                 .await;
         }
 
@@ -153,6 +150,13 @@ impl LanguageServer for KotoServer {
         &self,
         params: GotoDefinitionParams,
     ) -> Result<Option<GotoDefinitionResponse>> {
+        // BEGIN HACK
+        let info_cache = self.source_info.lock().await;
+        let len = info_cache.entries.len();
+        let msg = format!("info_cache len {}", len);
+        self.client.log_message(MessageType::INFO, msg).await;
+        // END HACK
+
         let uri = params.text_document_position_params.text_document.uri;
         let position = params.text_document_position_params.position;
         let result = self
