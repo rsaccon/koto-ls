@@ -35,8 +35,8 @@ pub struct SourceInfo {
     definitions: Vec<Definition>,
     // A vec of all references, sorted by start position
     references: Vec<Reference>,
-    // A vec of all definitions created via Rust API  // TODO: map with symbol as key
-    definitions_ext: Vec<Definition>,
+    // A vec of all references to definitions created via Rust API  // TODO: map with symbol as key
+    references_ext: Vec<Reference>,
     // An error that was encountered while compiling the script
     pub error: Option<Error>,
 }
@@ -84,13 +84,13 @@ impl SourceInfo {
                         let definition = self.definitions[i].clone();
                         definition
                     })
-                    .or_else(|| {
-                        // TODO: proper search for rust definitions
-                        self.definitions_ext
-                            .first()
-                            .map(|definition| definition.clone())
-                    })
             })
+        // .or_else(|| {
+        //     // TODO: proper search for rust definitions
+        //     self.references_ext
+        //         .first()
+        //         .map(|reference| reference.clone())
+        // })
         // .or_else(|| {
         //     self.definitions
         //         .binary_search_by(|definition| {
@@ -284,8 +284,8 @@ struct SourceInfoBuilder<'i> {
     // All references that have been found in the file.
     // The references get added as soon as they're encountered in the AST, so they're always sorted.
     references: Vec<Reference>,
-    // All definitions that have been created via Rust API.
-    definitions_ext: Vec<Definition>,
+    // All references to definitions that have been created via Rust API.
+    references_ext: Vec<Reference>,
 }
 
 impl<'i> SourceInfoBuilder<'i> {
@@ -296,20 +296,24 @@ impl<'i> SourceInfoBuilder<'i> {
             frames: Vec::new(),
             definitions: Vec::new(),
             references: Vec::new(),
-            definitions_ext: Vec::new(),
+            references_ext: Vec::new(),
         };
 
         if let Some(entry_point) = ast.entry_point() {
             result.visit_node(entry_point, Context::new(ast));
         };
 
-        // BEGIN Hardcoded while testing
+        result
+    }
+
+    fn add_reference_ext_draw(&mut self, location: Location) {
         let uri = Url::from_file_path(std::path::Path::new(
             "/Users/robertosaccon/GitHub/my-fidget-projects/fidget-koto/crates/fidget-koto/src/engine.rs",
         ));
         if let Ok(uri) = uri {
-            result.definitions_ext.push(Definition {
-                location: Location::new(
+            self.references_ext.push(Reference {
+                location,
+                definition: Location::new(
                     Arc::new(uri),
                     Span {
                         start: koto_parser::Position {
@@ -323,14 +327,8 @@ impl<'i> SourceInfoBuilder<'i> {
                     },
                 ),
                 id: StringSlice::from("draw"),
-                kind: SymbolKind::FUNCTION,
-                top_level: false,
-                children: None,
             });
         }
-        // END Hardcoded
-
-        result
     }
 
     fn build(mut self, error: Option<Error>) -> SourceInfo {
@@ -347,7 +345,7 @@ impl<'i> SourceInfoBuilder<'i> {
         SourceInfo {
             definitions: self.definitions,
             references: self.references,
-            definitions_ext: self.definitions_ext,
+            references_ext: self.references_ext,
             error,
         }
     }
