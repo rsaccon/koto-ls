@@ -163,6 +163,19 @@ impl LanguageServer for KotoServer {
                             )
                         })
                 })
+                .or_else(|| {
+                    info.get_keyword_from_position(position).map(|keyword| {
+                        format!(
+                            "**{}**  \nlen: {}, location: ({:?}|{:?})..({:?}|{:?})",
+                            keyword.name,
+                            keyword.name.len(),
+                            keyword.location.range.start.line,
+                            keyword.location.range.start.character,
+                            keyword.location.range.end.line,
+                            keyword.location.range.end.character
+                        )
+                    })
+                })
         });
 
         Ok(if result.is_none() {

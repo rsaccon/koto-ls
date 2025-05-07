@@ -40,6 +40,8 @@ pub struct SourceInfo {
     definitions: Vec<Definition>,
     // A vec of all references, sorted by start position
     references: Vec<Reference>,
+    // A vec of all keywords, sorted by start position
+    keywords: Vec<Keyword>,
     /// If an error was encountered while compiling the script it's cached here
     pub error: Option<Error>,
 }
@@ -126,6 +128,13 @@ impl SourceInfo {
         self.definitions
             .iter()
             .filter(|definition| definition.top_level)
+    }
+
+    pub fn get_keyword_from_position(&self, position: Position) -> Option<Keyword> {
+        self.keywords
+            .binary_search_by(|keyword| cmp_range_to_position(&keyword.location.range, position))
+            .ok()
+            .map(|i| self.keywords[i].clone())
     }
 }
 
@@ -259,6 +268,12 @@ pub struct Reference {
     pub id: StringSlice<usize>,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct Keyword {
+    pub location: Location,
+    pub name: String,
+}
+
 struct SourceInfoBuilder<'i> {
     // The uri of the file that is being scanned
     uri: Arc<Uri>,
@@ -276,6 +291,8 @@ struct SourceInfoBuilder<'i> {
     // All references that have been found in the file.
     // The references get added as soon as they're encountered in the AST, so they're always sorted.
     references: Vec<Reference>,
+
+    keywords: Vec<Keyword>,
 }
 
 impl<'i> SourceInfoBuilder<'i> {
@@ -286,6 +303,7 @@ impl<'i> SourceInfoBuilder<'i> {
             frames: Vec::new(),
             definitions: Vec::new(),
             references: Vec::new(),
+            keywords: Vec::new(),
         };
 
         if let Some(entry_point) = ast.entry_point() {
@@ -309,6 +327,7 @@ impl<'i> SourceInfoBuilder<'i> {
         SourceInfo {
             definitions: self.definitions,
             references: self.references,
+            keywords: self.keywords,
             error,
         }
     }
@@ -408,13 +427,26 @@ impl<'i> SourceInfoBuilder<'i> {
                 self.visit_node(*rhs, ctx.default());
             }
             Node::If(info) => {
+                let span_if = ctx.ast.span(node.span);
+                self.add_keyword("if", &span_if.start, &span_if.end, 0);
                 self.visit_node(info.condition, ctx.default());
+                let span_condition = ctx.ast.span(ctx.node(info.condition).span);
+                let mut span_remember = ctx.ast.span(ctx.node(info.then_node).span);
+                if span_if.start.line == span_remember.start.line {
+                    // single line statement
+                    self.add_keyword("then", &span_condition.end, &span_remember.start, 1);
+                }
                 self.visit_node(info.then_node, ctx.default());
                 for (else_if_condition, else_if_block) in info.else_if_blocks.iter() {
+                    let span_else_if = ctx.ast.span(ctx.node(*else_if_condition).span);
+                    self.add_keyword("else if", &span_remember.end, &span_else_if.start, 1);
                     self.visit_node(*else_if_condition, ctx.default());
                     self.visit_node(*else_if_block, ctx.default());
+                    span_remember = ctx.ast.span(ctx.node(*else_if_block).span);
                 }
                 if let Some(else_node) = info.else_node {
+                    let span_else_node = ctx.ast.span(ctx.node(else_node).span);
+                    self.add_keyword("else", &span_remember.end, &span_else_node.start, 1);
                     self.visit_node(else_node, ctx.default());
                 }
             }
@@ -452,11 +484,23 @@ impl<'i> SourceInfoBuilder<'i> {
                 }
             }
             Node::For(info) => {
+                let span_for = ctx.ast.span(node.span);
+                self.add_keyword("for", &span_for.start, &span_for.end, 0);
                 self.visit_nested(&info.args, ctx.with_ids_as_definitions());
                 self.visit_node(info.iterable, ctx.default());
                 self.visit_node(info.body, ctx.default());
             }
-            Node::While { condition, body } | Node::Until { condition, body } => {
+            Node::While { condition, body } => {
+                let span_while = ctx.ast.span(node.span);
+                let span_condition = ctx.ast.span(ctx.node(*condition).span);
+                // DOES NOT WORK !!!
+                self.add_keyword("while", &span_while.start, &span_condition.start, 0);
+                self.visit_node(*condition, ctx.default());
+                self.visit_node(*body, ctx.default());
+            }
+            Node::Until { condition, body } => {
+                let span_while = ctx.ast.span(node.span);
+                self.add_keyword("while", &span_while.start, &span_while.end, 0);
                 self.visit_node(*condition, ctx.default());
                 self.visit_node(*body, ctx.default());
             }
@@ -842,6 +886,28 @@ impl<'i> SourceInfoBuilder<'i> {
             location: Location::new(self.uri.clone(), span),
             definition,
             id,
+        });
+    }
+
+    fn add_keyword(
+        &mut self,
+        name: &str,
+        start: &koto_parser::Position,
+        end: &koto_parser::Position,
+        start_column_offset: u32,
+    ) {
+        self.keywords.push(Keyword {
+            location: Location::new(
+                self.uri.clone(),
+                Span {
+                    start: koto_parser::Position {
+                        line: start.line,
+                        column: start.column + start_column_offset,
+                    },
+                    end: end.clone(),
+                },
+            ),
+            name: name.to_string(),
         });
     }
 
