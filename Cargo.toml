@@ -29,6 +29,10 @@ version = "0.16.0"
 default-features = false
 features = ["arc", "error_ast"]
 
+[dependencies.koto_documentation]
+version = "0.16.0"
+path = "../koto/crates/documentation" # TEMPORARY
+
 [patch.crates-io]
 koto_bytecode = { git = "https://github.com/koto-lang/koto" }
 koto_parser = { git = "https://github.com/koto-lang/koto" }

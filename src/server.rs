@@ -1,6 +1,7 @@
 use crate::info_cache::InfoCache;
 use crate::source_info::SourceInfo;
 use crate::utils::{default, koto_span_to_lsp_range};
+use koto_documentation::Help;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -11,6 +12,7 @@ use tower_lsp_server::{Client, LanguageServer};
 pub struct KotoServer {
     client: Client,
     source_info: Arc<Mutex<InfoCache>>,
+    help: Arc<Mutex<Help>>,
 }
 
 impl KotoServer {
@@ -18,6 +20,7 @@ impl KotoServer {
         Self {
             client,
             source_info: Arc::new(Mutex::new(InfoCache::default())),
+            help: Arc::new(Mutex::new(Help::new())),
         }
     }
 
@@ -176,6 +179,23 @@ impl LanguageServer for KotoServer {
                         )
                     })
                 })
+            // fn help() -> Rc<Help> {
+            //     thread_local! {
+            //         static HELP: Rc<Help> = Rc::new(Help::new());
+            //     }
+
+            //     HELP.with(|help| help.clone())
+            // }
+            // fn run_help(&mut self, input: &str) -> Option<String> {
+            //     let input = input.trim();
+            //     if input == "help" {
+            //         Some(help().get_help(None))
+            //     } else {
+            //         input
+            //             .strip_prefix("help ")
+            //             .map(|search_string| format!("\n{}\n", help().get_help(Some(search_string))))
+            //     }
+            // }
         });
 
         Ok(if result.is_none() {
