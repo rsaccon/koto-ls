@@ -168,47 +168,35 @@ impl LanguageServer for KotoServer {
                 })
                 .or_else(|| {
                     info.get_keyword_from_position(position).map(|keyword| {
-                        format!(
-                            "**{}**  \nlen: {}, location: ({:?}|{:?})..({:?}|{:?})",
-                            keyword.name,
-                            keyword.name.len(),
-                            keyword.location.range.start.line,
-                            keyword.location.range.start.character,
-                            keyword.location.range.end.line,
-                            keyword.location.range.end.character
-                        )
+                        // format!(
+                        //     "**{}**  \nlen: {}, location: ({:?}|{:?})..({:?}|{:?})",
+                        //     keyword.name,
+                        //     keyword.name.len(),
+                        //     keyword.location.range.start.line,
+                        //     keyword.location.range.start.character,
+                        //     keyword.location.range.end.line,
+                        //     keyword.location.range.end.character
+                        // )
+                        keyword.name
                     })
                 })
-            // fn help() -> Rc<Help> {
-            //     thread_local! {
-            //         static HELP: Rc<Help> = Rc::new(Help::new());
-            //     }
-
-            //     HELP.with(|help| help.clone())
-            // }
-            // fn run_help(&mut self, input: &str) -> Option<String> {
-            //     let input = input.trim();
-            //     if input == "help" {
-            //         Some(help().get_help(None))
-            //     } else {
-            //         input
-            //             .strip_prefix("help ")
-            //             .map(|search_string| format!("\n{}\n", help().get_help(Some(search_string))))
-            //     }
-            // }
         });
 
-        Ok(if result.is_none() {
+        if result.is_none() {
             self.client
                 .log_message(MessageType::INFO, "No definition found")
                 .await;
-            None
-        } else {
-            result.map(|text| Hover {
-                contents: HoverContents::Scalar(MarkedString::String(text)),
-                range: None,
-            })
-        })
+            return Ok(None);
+        }
+
+        let keyword = result.unwrap();
+        let help = self.help.lock().await;
+        let text = help.get_help(&keyword);
+        let text = format!("**{}**  \n{}", keyword, text);
+        Ok(Some(Hover {
+            contents: HoverContents::Scalar(MarkedString::String(text)),
+            range: None,
+        }))
     }
 
     async fn goto_definition(
