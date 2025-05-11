@@ -131,10 +131,13 @@ impl LanguageServer for KotoServer {
                     if location.uri.as_ref() == &uri {
                         info.get_definition_from_location(location)
                             .map(|definition| {
-                                format!(
-                                    "**{}**  \n{:?} reference",
-                                    definition.id.as_str(),
-                                    definition.kind,
+                                (
+                                    format!(
+                                        "**{}**  \n{:?} reference",
+                                        definition.id.as_str(),
+                                        definition.kind,
+                                    ),
+                                    false,
                                 )
                             })
                     } else {
@@ -146,10 +149,13 @@ impl LanguageServer for KotoServer {
                             } else {
                                 info.get_definition_from_location(location)
                                     .map(|definition| {
-                                        format!(
-                                            "**{}**  \n{:?} reference (from module)",
-                                            definition.id.as_str(),
-                                            definition.kind,
+                                        (
+                                            format!(
+                                                "**{}**  \n{:?} reference (from module)",
+                                                definition.id.as_str(),
+                                                definition.kind,
+                                            ),
+                                            false,
                                         )
                                     })
                             }
@@ -159,10 +165,13 @@ impl LanguageServer for KotoServer {
                 .or_else(|| {
                     info.get_definition_from_position(position)
                         .map(|definition| {
-                            format!(
-                                "**{}**  \n{:?} definition",
-                                definition.id.as_str(),
-                                definition.kind,
+                            (
+                                format!(
+                                    "**{}**  \n{:?} definition",
+                                    definition.id.as_str(),
+                                    definition.kind,
+                                ),
+                                false,
                             )
                         })
                 })
@@ -177,25 +186,26 @@ impl LanguageServer for KotoServer {
                         //     keyword.location.range.end.line,
                         //     keyword.location.range.end.character
                         // )
-                        keyword.name
+                        (keyword.name, true)
                     })
                 })
         });
 
-        if result.is_none() {
+        if let Some((mut text, is_query)) = result {
+            if is_query {
+                let help = self.help.lock().await;
+                text = format!("**{}**  \n{}", text, help.get_help(&text));
+            }
+            Ok(Some(Hover {
+                contents: HoverContents::Scalar(MarkedString::String(text)),
+                range: None,
+            }))
+        } else {
             self.client
                 .log_message(MessageType::INFO, "No definition found")
                 .await;
-            return Ok(None);
+            Ok(None)
         }
-
-        let keyword = result.unwrap();
-        let help = self.help.lock().await;
-        let text = format!("**{}**  \n{}", keyword, help.get_help(&keyword));
-        Ok(Some(Hover {
-            contents: HoverContents::Scalar(MarkedString::String(text)),
-            range: None,
-        }))
     }
 
     async fn goto_definition(
