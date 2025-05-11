@@ -191,8 +191,7 @@ impl LanguageServer for KotoServer {
 
         let keyword = result.unwrap();
         let help = self.help.lock().await;
-        let text = help.get_help(&keyword);
-        let text = format!("**{}**  \n{}", keyword, text);
+        let text = format!("**{}**  \n{}", keyword, help.get_help(&keyword));
         Ok(Some(Hover {
             contents: HoverContents::Scalar(MarkedString::String(text)),
             range: None,

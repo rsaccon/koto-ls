@@ -451,6 +451,9 @@ impl<'i> SourceInfoBuilder<'i> {
                 }
             }
             Node::Match { expression, arms } => {
+                let span_match = ctx.ast.span(node.span);
+                let span_expression = ctx.ast.span(ctx.node(*expression).span);
+                self.add_keyword("match", &span_match.start, &span_expression.start, 0);
                 self.visit_node(*expression, ctx.default());
                 for arm in arms.iter() {
                     for pattern in arm.patterns.iter() {
@@ -463,9 +466,25 @@ impl<'i> SourceInfoBuilder<'i> {
                 }
             }
             Node::Switch(arms) => {
+                let span_switch = ctx.ast.span(node.span);
+                let mut done = false;
                 for arm in arms.iter() {
                     if let Some(condition) = arm.condition {
+                        if !done {
+                            let span_condition = ctx.ast.span(ctx.node(condition).span);
+                            self.add_keyword(
+                                "switch",
+                                &span_switch.start,
+                                &span_condition.start,
+                                0,
+                            );
+                            done = true
+                        }
                         self.visit_node(condition, ctx.default());
+                    }
+                    if !done {
+                        let span_expression = ctx.ast.span(ctx.node(arm.expression).span);
+                        self.add_keyword("switch", &span_switch.start, &span_expression.start, 0);
                     }
                     self.visit_node(arm.expression, ctx.default());
                 }
