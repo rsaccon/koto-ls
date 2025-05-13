@@ -427,33 +427,29 @@ impl<'i> SourceInfoBuilder<'i> {
                 self.visit_node(*rhs, ctx.default());
             }
             Node::If(info) => {
-                let span_if = ctx.ast.span(node.span);
-                self.add_keyword("if", &span_if.start, &span_if.end, 0);
+                self.add_keyword(
+                    "if",
+                    &ctx.ast.span(node.span).start,
+                    &ctx.ast.span(node.span).end,
+                    0,
+                );
                 self.visit_node(info.condition, ctx.default());
-                let span_condition = ctx.ast.span(ctx.node(info.condition).span);
-                let mut span_remember = ctx.ast.span(ctx.node(info.then_node).span);
-                if span_if.start.line == span_remember.start.line {
-                    // single line statement
-                    self.add_keyword("then", &span_condition.end, &span_remember.start, 1);
-                }
                 self.visit_node(info.then_node, ctx.default());
                 for (else_if_condition, else_if_block) in info.else_if_blocks.iter() {
-                    let span_else_if = ctx.ast.span(ctx.node(*else_if_condition).span);
-                    self.add_keyword("else if", &span_remember.end, &span_else_if.start, 1);
                     self.visit_node(*else_if_condition, ctx.default());
                     self.visit_node(*else_if_block, ctx.default());
-                    span_remember = ctx.ast.span(ctx.node(*else_if_block).span);
                 }
                 if let Some(else_node) = info.else_node {
-                    let span_else_node = ctx.ast.span(ctx.node(else_node).span);
-                    self.add_keyword("else", &span_remember.end, &span_else_node.start, 1);
                     self.visit_node(else_node, ctx.default());
                 }
             }
             Node::Match { expression, arms } => {
-                let span_match = ctx.ast.span(node.span);
-                let span_expression = ctx.ast.span(ctx.node(*expression).span);
-                self.add_keyword("match", &span_match.start, &span_expression.start, 0);
+                self.add_keyword(
+                    "match",
+                    &ctx.ast.span(node.span).start,
+                    &ctx.ast.span(*expression).start,
+                    0,
+                );
                 self.visit_node(*expression, ctx.default());
                 for arm in arms.iter() {
                     for pattern in arm.patterns.iter() {
@@ -466,16 +462,14 @@ impl<'i> SourceInfoBuilder<'i> {
                 }
             }
             Node::Switch(arms) => {
-                let span_switch = ctx.ast.span(node.span);
                 let mut done = false;
                 for arm in arms.iter() {
                     if let Some(condition) = arm.condition {
                         if !done {
-                            let span_condition = ctx.ast.span(ctx.node(condition).span);
                             self.add_keyword(
                                 "switch",
-                                &span_switch.start,
-                                &span_condition.start,
+                                &ctx.ast.span(node.span).start,
+                                &ctx.ast.span(condition).start,
                                 0,
                             );
                             done = true
@@ -483,8 +477,12 @@ impl<'i> SourceInfoBuilder<'i> {
                         self.visit_node(condition, ctx.default());
                     }
                     if !done {
-                        let span_expression = ctx.ast.span(ctx.node(arm.expression).span);
-                        self.add_keyword("switch", &span_switch.start, &span_expression.start, 0);
+                        self.add_keyword(
+                            "switch",
+                            &ctx.ast.span(node.span).start,
+                            &ctx.ast.span(arm.expression).start,
+                            0,
+                        );
                     }
                     self.visit_node(arm.expression, ctx.default());
                 }
@@ -503,23 +501,28 @@ impl<'i> SourceInfoBuilder<'i> {
                 }
             }
             Node::For(info) => {
-                let span_for = ctx.ast.span(node.span);
-                self.add_keyword("for", &span_for.start, &span_for.end, 0);
+                self.add_keyword(
+                    "for",
+                    &ctx.ast.span(node.span).start,
+                    &ctx.ast.span(info.args[0]).start,
+                    0,
+                );
                 self.visit_nested(&info.args, ctx.with_ids_as_definitions());
                 self.visit_node(info.iterable, ctx.default());
                 self.visit_node(info.body, ctx.default());
             }
             Node::While { condition, body } => {
-                let span_while = ctx.ast.span(node.span);
-                let span_condition = ctx.ast.span(ctx.node(*condition).span);
-                // DOES NOT WORK !!!
-                self.add_keyword("while", &span_while.start, &span_condition.start, 0);
+                self.add_keyword(
+                    "while",
+                    &ctx.ast.span(node.span).start,
+                    &ctx.ast.span(*condition).start,
+                    0,
+                );
                 self.visit_node(*condition, ctx.default());
                 self.visit_node(*body, ctx.default());
             }
             Node::Until { condition, body } => {
-                let span_while = ctx.ast.span(node.span);
-                self.add_keyword("while", &span_while.start, &span_while.end, 0);
+                // TODO
                 self.visit_node(*condition, ctx.default());
                 self.visit_node(*body, ctx.default());
             }
