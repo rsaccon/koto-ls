@@ -1,3 +1,4 @@
+mod help;
 mod info_cache;
 mod server;
 mod source_info;

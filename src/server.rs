@@ -1,7 +1,7 @@
+use crate::help::Help;
 use crate::info_cache::InfoCache;
 use crate::source_info::SourceInfo;
 use crate::utils::{default, koto_span_to_lsp_range};
-use koto_documentation::Help;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -124,8 +124,8 @@ impl LanguageServer for KotoServer {
         let uri = params.text_document_position_params.text_document.uri;
         let position = params.text_document_position_params.position;
 
-        let lock_await = self.source_info.lock().await;
-        let result = lock_await.get(&uri).and_then(|info| {
+        let info_cache = self.source_info.lock().await;
+        let result = info_cache.get(&uri).and_then(|info| {
             info.get_referenced_definition_location(position)
                 .and_then(|location| {
                     if location.uri.as_ref() == &uri {
@@ -141,7 +141,7 @@ impl LanguageServer for KotoServer {
                                 )
                             })
                     } else {
-                        lock_await.get(&location.uri).and_then(|info| {
+                        info_cache.get(&location.uri).and_then(|info| {
                             // Module reference
                             if location.range.end.character == 0 && location.range.end.line == 0 {
                                 // TODO: proper way to handle module names
@@ -176,36 +176,31 @@ impl LanguageServer for KotoServer {
                         })
                 })
                 .or_else(|| {
-                    info.get_keyword_from_position(position).map(|keyword| {
-                        // format!(
-                        //     "**{}**  \nlen: {}, location: ({:?}|{:?})..({:?}|{:?})",
-                        //     keyword.name,
-                        //     keyword.name.len(),
-                        //     keyword.location.range.start.line,
-                        //     keyword.location.range.start.character,
-                        //     keyword.location.range.end.line,
-                        //     keyword.location.range.end.character
-                        // )
-                        (keyword.name, true)
-                    })
+                    info.get_keyword_from_position(position)
+                        .map(|keyword| (keyword.name, true))
+                })
+                .or_else(|| {
+                    info.get_api_reference_from_position(position)
+                        .map(|api_reference| (String::from(api_reference.id.as_str()), true))
                 })
         });
 
-        if let Some((mut text, is_query)) = result {
+        let result = if let Some((mut text, is_query)) = result {
             if is_query {
                 let help = self.help.lock().await;
-                text = format!("**{}**  \n{}", text, help.get_help(&text));
+                text = format!("{}", help.get_help(&text));
             }
-            Ok(Some(Hover {
+            Some(Hover {
                 contents: HoverContents::Scalar(MarkedString::String(text)),
                 range: None,
-            }))
+            })
         } else {
             self.client
                 .log_message(MessageType::INFO, "No definition found")
                 .await;
-            Ok(None)
-        }
+            None
+        };
+        Ok(result)
     }
 
     async fn goto_definition(

@@ -42,6 +42,8 @@ pub struct SourceInfo {
     references: Vec<Reference>,
     // A vec of all keywords, sorted by start position
     keywords: Vec<Keyword>,
+    // A vec of all functions or values defined via Rust API, sorted by start position
+    api_references: Vec<ApiReference>,
     /// If an error was encountered while compiling the script it's cached here
     pub error: Option<Error>,
 }
@@ -135,6 +137,15 @@ impl SourceInfo {
             .binary_search_by(|keyword| cmp_range_to_position(&keyword.location.range, position))
             .ok()
             .map(|i| self.keywords[i].clone())
+    }
+
+    pub fn get_api_reference_from_position(&self, position: Position) -> Option<ApiReference> {
+        self.api_references
+            .binary_search_by(|api_reference| {
+                cmp_range_to_position(&api_reference.location.range, position)
+            })
+            .ok()
+            .map(|i| self.api_references[i].clone())
     }
 }
 
@@ -274,6 +285,12 @@ pub struct Keyword {
     pub name: String,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct ApiReference {
+    pub location: Location,
+    pub id: StringSlice<usize>,
+}
+
 struct SourceInfoBuilder<'i> {
     // The uri of the file that is being scanned
     uri: Arc<Uri>,
@@ -291,8 +308,10 @@ struct SourceInfoBuilder<'i> {
     // All references that have been found in the file.
     // The references get added as soon as they're encountered in the AST, so they're always sorted.
     references: Vec<Reference>,
-
+    // TODO
     keywords: Vec<Keyword>,
+    // TODO
+    api_references: Vec<ApiReference>,
 }
 
 impl<'i> SourceInfoBuilder<'i> {
@@ -304,6 +323,7 @@ impl<'i> SourceInfoBuilder<'i> {
             definitions: Vec::new(),
             references: Vec::new(),
             keywords: Vec::new(),
+            api_references: Vec::new(),
         };
 
         if let Some(entry_point) = ast.entry_point() {
@@ -328,6 +348,7 @@ impl<'i> SourceInfoBuilder<'i> {
             definitions: self.definitions,
             references: self.references,
             keywords: self.keywords,
+            api_references: self.api_references,
             error,
         }
     }
@@ -358,11 +379,17 @@ impl<'i> SourceInfoBuilder<'i> {
             | Node::Loop { body: node }
             | Node::Throw(node)
             | Node::Yield(node)
-            | Node::PackedExpression(node)
-            | Node::Debug {
-                expression: node, ..
-            } => {
+            | Node::PackedExpression(node) => {
                 self.visit_node(*node, ctx.default());
+            }
+            Node::Debug { expression, .. } => {
+                self.add_keyword(
+                    "debug",
+                    &ctx.ast.span(node.span).start,
+                    &ctx.ast.span(*expression).start,
+                    0,
+                );
+                self.visit_node(*expression, ctx.default());
             }
             // Nodes with a list of nodes that should be visited
             Node::List(nodes)
@@ -409,8 +436,22 @@ impl<'i> SourceInfoBuilder<'i> {
                 self.visit_node(info.body, ctx.default());
                 self.pop_frame();
             }
-            Node::Import { from, items } => self.visit_import(from, items, &ctx),
+            Node::Import { from, items } => {
+                self.add_keyword(
+                    "import",
+                    &ctx.ast.span(node.span).start,
+                    &ctx.ast.span(from[0]).start,
+                    0,
+                );
+                self.visit_import(from, items, &ctx)
+            }
             Node::Export(item) => {
+                self.add_keyword(
+                    "export",
+                    &ctx.ast.span(node.span).start,
+                    &ctx.ast.span(*item).start,
+                    0,
+                );
                 // Set id_is_definition to true to count exported map keys as definitions
                 self.visit_node(*item, ctx.with_ids_as_definitions());
             }
@@ -511,18 +552,14 @@ impl<'i> SourceInfoBuilder<'i> {
                 self.visit_node(info.iterable, ctx.default());
                 self.visit_node(info.body, ctx.default());
             }
-            Node::While { condition, body } => {
+            Node::While { condition, body } | Node::Until { condition, body } => {
                 self.add_keyword(
                     "while",
                     &ctx.ast.span(node.span).start,
-                    &ctx.ast.span(*condition).start,
+                    // &ctx.ast.span(*condition).start, // DOES NOT WORK
+                    &ctx.ast.span(node.span).end,
                     0,
                 );
-                self.visit_node(*condition, ctx.default());
-                self.visit_node(*body, ctx.default());
-            }
-            Node::Until { condition, body } => {
-                // TODO
                 self.visit_node(*condition, ctx.default());
                 self.visit_node(*body, ctx.default());
             }
@@ -890,6 +927,11 @@ impl<'i> SourceInfoBuilder<'i> {
         let id = ast.constants().get_string_slice(id);
 
         let Some(definition) = self.get_definition(id.as_str()) else {
+            if id.as_str() == "print" || true {
+                // is in prelude or has api_docs
+                let span = ast.span(node.span);
+                self.add_api_reference(id, *span);
+            }
             return;
         };
 
@@ -930,6 +972,13 @@ impl<'i> SourceInfoBuilder<'i> {
                 },
             ),
             name: name.to_string(),
+        });
+    }
+
+    fn add_api_reference(&mut self, id: StringSlice<usize>, span: Span) {
+        self.api_references.push(ApiReference {
+            location: Location::new(self.uri.clone(), span),
+            id,
         });
     }
 
