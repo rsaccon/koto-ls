@@ -1,10 +1,12 @@
 use indexmap::IndexMap;
 use koto_cli::docs;
 use pulldown_cmark::HeadingLevel;
-use std::{iter::Peekable, sync::Arc};
+use std::{env, fs, iter::Peekable, sync::Arc};
 
 const HELP_RESULT_STR: &str = "# ➝ ";
 pub const HELP_INDENT: &str = "  ";
+const USER_DOCS_DIR: &str = ".koto-api-docs";
+const PRELUDE_DOC: &str = "PRELUDE.md";
 
 pub struct HelpEntry {
     // The entry's user-displayed name
@@ -13,8 +15,6 @@ pub struct HelpEntry {
     pub help: Arc<str>,
     // Additional keywords that should be checked when searching
     pub keywords: Vec<Arc<str>>,
-    // Names of related topics to show in the 'See also' section
-    // pub see_also: Vec<Arc<str>>,
 }
 
 pub struct Help {
@@ -22,10 +22,6 @@ pub struct Help {
     help_map: IndexMap<Arc<str>, HelpEntry>,
     // The list of guide topics
     guide_topics: Vec<Arc<str>>,
-    // The list of core library module names
-    core_lib_names: Vec<Arc<str>>,
-    // The list of extra module names
-    extra_lib_names: Vec<Arc<str>>,
 }
 
 impl Help {
@@ -33,8 +29,6 @@ impl Help {
         let mut result = Self {
             help_map: IndexMap::new(),
             guide_topics: Vec::new(),
-            core_lib_names: Vec::new(),
-            extra_lib_names: Vec::new(),
         };
 
         result.add_help_from_guide();
@@ -53,8 +47,7 @@ impl Help {
             docs::core_lib::tuple(),
         ];
         for file_contents in core_lib_files.iter() {
-            let module_name = result.add_help_from_reference(file_contents);
-            result.core_lib_names.push(module_name);
+            let _module_name = result.add_help_from_reference(file_contents);
         }
 
         let extra_lib_files = [
@@ -68,65 +61,29 @@ impl Help {
             docs::extra_lib::yaml(),
         ];
         for file_contents in extra_lib_files.iter() {
-            let module_name = result.add_help_from_reference(file_contents);
-            result.extra_lib_names.push(module_name);
+            result.add_help_from_reference(file_contents);
+        }
+
+        if let Ok(root_dir) = env::current_dir() {
+            let path = root_dir.join(USER_DOCS_DIR).join(PRELUDE_DOC);
+            if let Ok(file_contents) = fs::read_to_string(path) {
+                result.add_help_from_reference(&file_contents);
+            }
+            // TODO: crawl files in .koto_api_docs
         }
         result
     }
-
-    // pub fn topics(&self) -> impl Iterator<Item = Arc<str>> {
-    //     self.core_lib_names
-    //         .iter()
-    //         .chain(self.extra_lib_names.iter())
-    //         .chain(self.guide_topics.iter())
-    //         .cloned()
-    // }
-
-    // pub fn all_entries(&self) -> impl Iterator<Item = (&Arc<str>, &HelpEntry)> {
-    //     self.help_map.iter()
-    // }
 
     pub fn get_help(&self, search: &str) -> String {
         let search_key = text_to_key(search);
         match self.help_map.get(&search_key) {
             Some(entry) => {
-                let help = format!(
+                format!(
                     "{name}\n{underline}{help}",
                     name = entry.name,
                     underline = "=".repeat(entry.name.len()),
                     help = entry.help
-                );
-
-                //                 let see_also: Vec<_> = entry
-                //                     .see_also
-                //                     .iter()
-                //                     .chain(self.help_map.iter().filter_map(|(key, search_entry)| {
-                //                         if key.contains(search_key.as_ref())
-                //                             && !entry.see_also.contains(&search_entry.name)
-                //                             && search_entry.name != entry.name
-                //                         {
-                //                             Some(&search_entry.name)
-                //                         } else {
-                //                             None
-                //                         }
-                //                     }))
-                //                     .collect();
-
-                //                 if !see_also.is_empty() {
-                //                     help += "
-
-                // --------
-
-                // See also:";
-
-                //                     let item_prefix = format!("\n{HELP_INDENT}- ");
-                //                     for see_also_entry in see_also.iter() {
-                //                         help.push_str(&item_prefix);
-                //                         help.push_str(see_also_entry);
-                //                     }
-                //                 }
-
-                help
+                )
             }
             None => {
                 let matches = self
@@ -185,13 +142,6 @@ impl Help {
                 sub_topics.push(sub_topic);
             }
 
-            // let see_also = sub_topics
-            //     .iter()
-            //     .flat_map(|sub_topic| {
-            //         iter::once(&sub_topic.name).chain(sub_topic.sub_sections.iter())
-            //     })
-            //     .cloned()
-            //     .collect();
             self.help_map.insert(
                 text_to_key(&topic.name),
                 HelpEntry {
@@ -221,7 +171,7 @@ impl Help {
         }
     }
 
-    fn add_help_from_reference(&mut self, markdown: &str) -> Arc<str> {
+    fn add_help_from_reference(&mut self, markdown: &str) {
         let mut parser = pulldown_cmark::Parser::new(markdown).peekable();
 
         let help_section = consume_help_section(&mut parser, None, HeadingLevel::H1, false);
@@ -256,8 +206,6 @@ impl Help {
                 },
             );
         }
-
-        help_section.name
     }
 }
 
