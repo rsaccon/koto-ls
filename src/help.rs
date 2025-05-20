@@ -222,7 +222,6 @@ impl Help {
                             .iter()
                             .map(|sub_section| text_to_key(sub_section))
                             .collect(),
-                        // see_also: vec![topic.name.clone()],
                     },
                 );
             }
