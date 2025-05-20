@@ -2,11 +2,13 @@ use indexmap::IndexMap;
 use koto_cli::docs;
 use pulldown_cmark::HeadingLevel;
 use std::{env, fs, iter::Peekable, sync::Arc};
+use walkdir::WalkDir;
 
 const HELP_RESULT_STR: &str = "# ➝ ";
 pub const HELP_INDENT: &str = "  ";
 const USER_DOCS_DIR: &str = ".koto-api-docs";
-const PRELUDE_DOC: &str = "PRELUDE.md";
+const DEFAULT_IMPORTS: &str = "DEFAULT-IMPORTS";
+const IGNORE_PRELUDE: &str = "IGNORE";
 
 pub struct HelpEntry {
     // The entry's user-displayed name
@@ -22,6 +24,10 @@ pub struct Help {
     help_map: IndexMap<Arc<str>, HelpEntry>,
     // The list of guide topics
     guide_topics: Vec<Arc<str>>,
+    // The list of automatically imported koto modules, values and/or functions
+    default_imports: Vec<Arc<str>>,
+    // The list of removed default prelude entries (e.g. "io" or "io.print")
+    ignore_prelude: Vec<Arc<str>>,
 }
 
 impl Help {
@@ -29,6 +35,8 @@ impl Help {
         let mut result = Self {
             help_map: IndexMap::new(),
             guide_topics: Vec::new(),
+            default_imports: Vec::new(),
+            ignore_prelude: Vec::new(),
         };
 
         result.add_help_from_guide();
@@ -65,17 +73,67 @@ impl Help {
         }
 
         if let Ok(root_dir) = env::current_dir() {
-            let path = root_dir.join(USER_DOCS_DIR).join(PRELUDE_DOC);
+            let path = root_dir.join(USER_DOCS_DIR).join(DEFAULT_IMPORTS);
             if let Ok(file_contents) = fs::read_to_string(path) {
-                result.add_help_from_reference(&file_contents);
+                for entry in file_contents.split('\n') {
+                    if !entry.starts_with("#") {
+                        result.default_imports.push(entry.trim().into());
+                    }
+                }
             }
-            // TODO: crawl files in .koto_api_docs
+            let path = root_dir.join(USER_DOCS_DIR).join(IGNORE_PRELUDE);
+            if let Ok(file_contents) = fs::read_to_string(path) {
+                for entry in file_contents.split('\n') {
+                    if !entry.starts_with("#") {
+                        result.ignore_prelude.push(entry.trim().into());
+                    }
+                }
+            }
+            for entry in WalkDir::new(USER_DOCS_DIR)
+                .into_iter()
+                .filter_map(|e| e.ok())
+                .filter(|e| {
+                    !e.file_type().is_dir()
+                        && e.file_name().to_string_lossy().trim().ends_with(".md")
+                })
+            {
+                let _file_name = entry.file_name().to_string_lossy().trim();
+                if entry.depth() > 0 {
+                    // TODO
+                }
+                //let _module = file_name.clone();
+                if let Ok(file_contents) = fs::read_to_string(entry.path()) {
+                    result.add_help_from_reference(&file_contents);
+                }
+            }
         }
         result
     }
 
+    pub fn maybe_default_import(&self, text: &str) -> Arc<str> {
+        let mut ending: String = ".".to_owned();
+        ending.push_str(text);
+        // TODO: try without clone
+        for entry in self.default_imports.clone() {
+            if entry.ends_with(ending.as_str()) {
+                return entry;
+            }
+        }
+        text.into()
+    }
+
+    pub fn search_keywords(&self, _search: &str) -> String {
+        String::new()
+    }
+
+    pub fn search_references(&self, _search: &str) -> String {
+        String::new()
+    }
+
     pub fn get_help(&self, search: &str) -> String {
-        let search_key = text_to_key(search);
+        //let search_key = text_to_key(search);
+        let search_key = self.maybe_default_import(search);
+
         match self.help_map.get(&search_key) {
             Some(entry) => {
                 format!(
