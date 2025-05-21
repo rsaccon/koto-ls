@@ -24,9 +24,11 @@ pub struct Help {
     help_map: IndexMap<Arc<str>, HelpEntry>,
     // The list of guide topics
     guide_topics: Vec<Arc<str>>,
-    // The list of automatically imported koto modules, values and/or functions
+    // The list of automatically imported koto functions and/or values
     default_imports: Vec<Arc<str>>,
-    // The list of removed default prelude entries (e.g. "io" or "io.print")
+    // The list of wildcard imports (e.g. "foo.*")
+    default_wildcard_imports: Vec<Arc<str>>,
+    // The list of removed default prelude entries (e.g. "foo" or "foo.bar")
     ignore_prelude: Vec<Arc<str>>,
 }
 
@@ -35,9 +37,19 @@ impl Help {
         let mut result = Self {
             help_map: IndexMap::new(),
             guide_topics: Vec::new(),
+            default_wildcard_imports: Vec::new(),
             default_imports: Vec::new(),
             ignore_prelude: Vec::new(),
         };
+
+        result.default_imports.push("test.assert".into());
+        result.default_imports.push("test.assert_eq".into());
+        result.default_imports.push("test.assert_ne".into());
+        result.default_imports.push("test.assert_near".into());
+        result.default_imports.push("io.print".into());
+        result.default_imports.push("koto.copy".into());
+        result.default_imports.push("koto.size".into());
+        result.default_imports.push("koto.type".into());
 
         result.add_help_from_guide();
 
@@ -76,16 +88,22 @@ impl Help {
             let path = root_dir.join(USER_DOCS_DIR).join(DEFAULT_IMPORTS);
             if let Ok(file_contents) = fs::read_to_string(path) {
                 for entry in file_contents.split('\n') {
+                    let entry = entry.trim();
                     if !entry.starts_with("#") {
-                        result.default_imports.push(entry.trim().into());
+                        if entry.ends_with(".*") {
+                            result.default_wildcard_imports.push(entry.into());
+                        } else {
+                            result.default_imports.push(entry.into());
+                        }
                     }
                 }
             }
             let path = root_dir.join(USER_DOCS_DIR).join(IGNORE_PRELUDE);
             if let Ok(file_contents) = fs::read_to_string(path) {
                 for entry in file_contents.split('\n') {
+                    let entry = entry.trim();
                     if !entry.starts_with("#") {
-                        result.ignore_prelude.push(entry.trim().into());
+                        result.ignore_prelude.push(entry.into());
                     }
                 }
             }
@@ -97,12 +115,15 @@ impl Help {
                         && e.file_name().to_string_lossy().trim().ends_with(".md")
                 })
             {
-                let _file_name = entry.file_name().to_string_lossy().trim();
-                if entry.depth() > 0 {
-                    // TODO
-                }
-                //let _module = file_name.clone();
+                // let file_name = entry.file_name().to_string_lossy().trim();
+                // if entry.depth() == 0 {
+                //     // TODO
+                // } else {
+                //     // TODO
+                // }
+                // let _module = file_name.clone();
                 if let Ok(file_contents) = fs::read_to_string(entry.path()) {
+                    // TODO expand wildcard default_imports into default_imports
                     result.add_help_from_reference(&file_contents);
                 }
             }
