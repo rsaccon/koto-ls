@@ -6,9 +6,9 @@ use walkdir::WalkDir;
 
 const HELP_RESULT_STR: &str = "# ➝ ";
 pub const HELP_INDENT: &str = "  ";
-const USER_DOCS_DIR: &str = ".koto-api-docs";
-const DEFAULT_IMPORTS: &str = "DEFAULT-IMPORTS";
-const IGNORE_PRELUDE: &str = "IGNORE";
+const API_DOCS_DIR: &str = ".koto-api-docs";
+const DEFAULT_IMPORTS: &str = "DEFAULT_IMPORTS";
+const IGNORE_CORE_LIBS: &str = "IGNORE";
 
 pub struct HelpEntry {
     // The entry's user-displayed name
@@ -85,7 +85,7 @@ impl Help {
         }
 
         if let Ok(root_dir) = env::current_dir() {
-            let path = root_dir.join(USER_DOCS_DIR).join(DEFAULT_IMPORTS);
+            let path = root_dir.join(API_DOCS_DIR).join(DEFAULT_IMPORTS);
             if let Ok(file_contents) = fs::read_to_string(path) {
                 for entry in file_contents.split('\n') {
                     let entry = entry.trim();
@@ -98,7 +98,7 @@ impl Help {
                     }
                 }
             }
-            let path = root_dir.join(USER_DOCS_DIR).join(IGNORE_PRELUDE);
+            let path = root_dir.join(API_DOCS_DIR).join(IGNORE_CORE_LIBS);
             if let Ok(file_contents) = fs::read_to_string(path) {
                 for entry in file_contents.split('\n') {
                     let entry = entry.trim();
@@ -107,7 +107,7 @@ impl Help {
                     }
                 }
             }
-            for entry in WalkDir::new(USER_DOCS_DIR)
+            for entry in WalkDir::new(API_DOCS_DIR)
                 .into_iter()
                 .filter_map(|e| e.ok())
                 .filter(|e| {
