@@ -1,7 +1,7 @@
 use indexmap::IndexMap;
 use koto_cli::docs;
 use pulldown_cmark::HeadingLevel;
-use std::{env, fs, iter::Peekable, sync::Arc};
+use std::{env, fs, iter::Peekable, path::PathBuf, sync::Arc};
 use walkdir::WalkDir;
 
 const HELP_RESULT_STR: &str = "# ➝ ";
@@ -67,7 +67,7 @@ impl Help {
             docs::core_lib::tuple(),
         ];
         for file_contents in core_lib_files.iter() {
-            let _module_name = result.add_help_from_reference(file_contents);
+            let _module_name = result.add_help_from_reference(file_contents, None);
         }
 
         let extra_lib_files = [
@@ -81,7 +81,7 @@ impl Help {
             docs::extra_lib::yaml(),
         ];
         for file_contents in extra_lib_files.iter() {
-            result.add_help_from_reference(file_contents);
+            result.add_help_from_reference(file_contents, None);
         }
 
         if let Ok(root_dir) = env::current_dir() {
@@ -107,6 +107,7 @@ impl Help {
                     }
                 }
             }
+
             for entry in WalkDir::new(API_DOCS_DIR)
                 .into_iter()
                 .filter_map(|e| e.ok())
@@ -115,16 +116,21 @@ impl Help {
                         && e.file_name().to_string_lossy().trim().ends_with(".md")
                 })
             {
-                // let file_name = entry.file_name().to_string_lossy().trim();
-                // if entry.depth() == 0 {
-                //     // TODO
-                // } else {
-                //     // TODO
-                // }
-                // let _module = file_name.clone();
+                let file_name = entry.file_name().to_string_lossy().trim();
                 if let Ok(file_contents) = fs::read_to_string(entry.path()) {
-                    // TODO expand wildcard default_imports into default_imports
-                    result.add_help_from_reference(&file_contents);
+                    // TODO expand wildcard default_imports into default_imports ???????????/
+                    let ancestors = entry.into_path().ancestors();
+                    let mut root: PathBuf;
+                    let mut module_segments = Vec::new();
+                    for i in [0..entry.depth()] {
+                        if let Some(root) = ancestors.next() {
+                            let filename = entry.file_name().to_string_lossy().trim();
+                            module_segments.push(filename);
+                        }
+                    }
+                    module_segments.reverse();
+                    let module = module_segments.as_slice().join(".");
+                    result.add_help_from_reference(&file_contents, Some(&module));
                 }
             }
         }
@@ -249,7 +255,7 @@ impl Help {
         }
     }
 
-    fn add_help_from_reference(&mut self, markdown: &str) {
+    fn add_help_from_reference(&mut self, markdown: &str, module: Option<&str>) {
         let mut parser = pulldown_cmark::Parser::new(markdown).peekable();
 
         let help_section = consume_help_section(&mut parser, None, HeadingLevel::H1, false);
