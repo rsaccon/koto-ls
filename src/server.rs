@@ -185,22 +185,22 @@ impl LanguageServer for KotoServer {
                 })
         });
 
-        let result = if let Some((mut text, is_query)) = result {
-            if is_query {
-                let help = self.help.lock().await;
-                text = format!("{}", help.get_help(&text));
-            }
-            Some(Hover {
-                contents: HoverContents::Scalar(MarkedString::String(text)),
-                range: None,
-            })
-        } else {
+        if result.is_none() {
             self.client
                 .log_message(MessageType::INFO, "No definition found")
                 .await;
-            None
-        };
-        Ok(result)
+            return Ok(None);
+        }
+
+        let (mut text, is_query) = result.unwrap();
+        if is_query {
+            let help = self.help.lock().await;
+            text = format!("{}", help.get_help(&text));
+        }
+        Ok(Some(Hover {
+            contents: HoverContents::Scalar(MarkedString::String(text)),
+            range: None,
+        }))
     }
 
     async fn goto_definition(

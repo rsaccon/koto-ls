@@ -375,17 +375,17 @@ fn consume_help_section(
                 }
                 parsing_mode = ParsingMode::Any;
             }
-            // Start(Tag::Link { title, .. }) => result.push_str(title),
-            Start(Tag::Link {
-                title, dest_url, ..
-            }) => {
-                result.push('[');
-                result.push_str(title);
-                result.push(']');
-                result.push('(');
-                result.push_str(dest_url);
-                result.push(')');
-            }
+            Start(Tag::Link { title, .. }) => result.push_str(title),
+            // Start(Tag::Link {
+            //     title, dest_url, ..
+            // }) => {
+            //     result.push('[');
+            //     result.push_str(title);
+            //     result.push(']');
+            //     result.push('(');
+            //     result.push_str(dest_url);
+            //     result.push(')');
+            // }
             End(TagEnd::Link) => {}
             Start(Tag::List(_)) => {
                 if list_indent == 0 {
